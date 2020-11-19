@@ -83,6 +83,22 @@ and the program ID.  For a complete list of available search fields, see
                           0.0           Full Frame                         -- Gemini-North    True ...
                           0.0           Full Frame                         -- Gemini-North    True ...
 
+In addition, the criteria query can accept additional parameters via the ``*rawqueryargs`` and ``**rawquerykwargs`` 
+optional parameters.
+
+The ``orderby`` parameter can be used to pass the desired sort order.
+
+.. code-block:: python
+
+                >>> from astroquery.gemini import Observations
+
+                >>> data = Observations.query_criteria('centralspectrum',
+                ...                                    instrument='GMOS-N',
+                ...                                    program_id='GN-CAL20191122',
+                ...                                    observation_type='BIAS',
+                ...                                    filter='r',
+                ...                                    orderby='data_label_desc')
+
 
 Observation Raw Queries
 -----------------------
@@ -93,7 +109,7 @@ for values or even new fields that were not present at the time this module was 
 
 Regular *args* search terms are sent down as part of the URL path.  Any *kwargs* are then sent down with
 key=value also in the URL path.  You can infer what to pass the function by inspecting the URL after a search in the
-Gemini website.
+Gemini website.  This call also supports the ``orderby`` kwarg for requesting the sort order.
 
 This example is equivalent to doing a web search with 
 `this example search <https://archive.gemini.edu/searchform/RAW/cols=CTOWEQ/notengineering/GMOS-N/PIname=Hirst/NotFail>`_ .
@@ -114,6 +130,35 @@ terms need be passed into the method.
                           0.0           Full Frame                         -- Gemini-North    True ...
                           0.0           Full Frame                         -- Gemini-North    True ...
                           0.0           Full Frame                         -- Gemini-North    True ...
+
+
+Authenticated Sessions
+----------------------
+
+The Gemini module allows for authenticated sessions using your GOA account.  This is the same account you login
+with on the GOA homepage at `<https://archive.gemini.edu/>`__.  The `astroquery.gemini.ObservationsClass.login` 
+method returns `True` if successful.
+
+.. code-block:: python
+
+                >>> from astroquery.gemini import Observations
+
+                >>> Observations.login(username, password)
+                >>> # do something with your elevated access
+
+
+File Downloading
+----------------
+
+As a convenience, you can request file downloads directly from the Gemini module.  This constructs the appropriate
+URL and fetches the file.  It will use any authenticated session you may have, so it will retrieve any
+proprietary data you may be permissioned for.
+
+.. code-block:: python
+
+                >>> from astroquery.gemini import Observations
+
+                >>> Observations.get_file("GS2020AQ319-10.fits", download_dir="/tmp")
 
 
 Reference/API

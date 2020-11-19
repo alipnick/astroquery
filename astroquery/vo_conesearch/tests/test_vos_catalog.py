@@ -15,7 +15,6 @@ import os
 import pytest
 
 # ASTROPY
-from astropy.tests.helper import remote_data
 from astropy.utils.data import get_pkg_data_filename
 
 # LOCAL
@@ -29,7 +28,7 @@ __doctest_skip__ = ['*']
 DB_FILE = get_pkg_data_filename(os.path.join('data', 'basic.json'))
 
 
-class TestCatalog(object):
+class TestCatalog:
     """Test VOSCatalog class."""
     def setup_class(self):
         self.cat = VOSCatalog.create(
@@ -72,7 +71,7 @@ def test_db_illegal_catalog():
         VOSDatabase(db._tree)
 
 
-class TestDatabase(object):
+class TestDatabase:
     """Test VOSDatabase class."""
     def setup_class(self):
         """Use ``from_json()`` method to init."""
@@ -188,7 +187,7 @@ def test_write_json(tmpdir):
     assert db.list_catalogs_by_url() == db2.list_catalogs_by_url()
 
 
-@remote_data
+@pytest.mark.remote_data
 def test_db_from_registry():
     """Test database created from VO registry.
 
