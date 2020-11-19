@@ -4,17 +4,27 @@ Search functionality for the Gemini archive of observations.
 For questions, contact ooberdorf@gemini.edu
 """
 
+import os
+
 from datetime import date
 
+from astropy import log
 from astropy import units
 from astropy.table import Table, MaskedColumn
 
 from astroquery.gemini.urlhelper import URLHelper
 import numpy as np
 
-from ..query import BaseQuery
+import logging
+
+from ..query import BaseQuery, QueryWithLogin
 from ..utils.class_or_instance import class_or_instance
 from . import conf
+from ..exceptions import AuthenticationWarning
+
+
+logger = logging.getLogger(__name__)
+
 
 __all__ = ['Observations', 'ObservationsClass']  # specifies what to import
 
@@ -92,7 +102,7 @@ __valid_raw_reduced__ = [
 ]
 
 
-class ObservationsClass(BaseQuery):
+class ObservationsClass(QueryWithLogin):
 
     server = conf.server
     url_helper = URLHelper(server)
@@ -105,6 +115,27 @@ class ObservationsClass(BaseQuery):
         can be done by cone search, by name, or by a set of criteria.
         """
         super().__init__()
+
+    def _login(self, username, password):
+        """
+        Login to the Gemini Archive website.
+
+        This method will authenticate the session as a particular user.  This may give you access
+        to additional information or access based on your credentials
+
+        Parameters
+        ----------
+        username : str
+            The username to login as
+        password : str
+            The password for the given account
+        """
+        params = dict(username=username, password=password)
+        r = self._session.request('POST', 'https://archive.gemini.edu/login/', params=params)
+        if b'<P>Welcome, you are sucessfully logged in' not in r.content:
+            logger.error('Unable to login, please check your credentials')
+            return False
+        return True
 
     @class_or_instance
     def query_region(self, coordinates, radius=0.3*units.deg):
@@ -156,13 +187,16 @@ class ObservationsClass(BaseQuery):
         return self.query_criteria(objectname=objectname, radius=radius)
 
     @class_or_instance
-    def query_criteria(self, coordinates=None, radius=0.3*units.deg, pi_name=None, program_id=None, utc_date=None,
+    def query_criteria(self, *rawqueryargs, coordinates=None, radius=0.3*units.deg, pi_name=None, program_id=None, utc_date=None,
                        instrument=None, observation_class=None, observation_type=None, mode=None,
-                       adaptive_optics=None, program_text=None, objectname=None, raw_reduced=None):
+                       adaptive_optics=None, program_text=None, objectname=None, raw_reduced=None,
+                       orderby=None, **rawquerykwargs):
         """
         search a variety of known parameters against the Gemini observations.
 
-        Given various criteria, search the Gemini archive for matching observations.
+        Given various criteria, search the Gemini archive for matching observations.  Note that
+        ``rawqueryargs`` and ``rawquerykwargs`` will pick up additional positional and key=value
+        arguments and pass then on to the raw query as is.
 
         Parameters
         ----------
@@ -252,18 +286,45 @@ class ObservationsClass(BaseQuery):
                 'PROCESSED_FLAT',
                 'PROCESSED_FRINGE',
                 'PROCESSED_ARC'
+        orderby : str, optional
+            Indicates how the results should be sorted.  Values should be like the ones used
+            in the archive website when sorting a column.  For example, ``data_label_desc`` would
+            sort by the data label in descending order.
+        rawqueryargs : list, optional
+            Additional arguments will be passed down to the raw query.  This covers any
+            additional parameters that would end up as '/parametervalue/' in the URL to the archive
+            webservice.
+        rawquerykwargs : dict, optional
+            Additional key/value arguments will also be passed down to the raw query.  This covers
+            any parameters that would end up as '/key=value/' in the URL to the archive webservice.
 
         Returns
         -------
         response : `~astropy.table.Table`
+
+        Raises
+        ------
+        ValueError: passed value is not recognized for the given field, see message for details
         """
 
         # Build parameters into raw query
         #
         # This consists of a set of unnamed arguments, args, and key/value pairs, kwargs
+
+        # These will hold the passed freeform parameters plus the explicit criteria
+        # for our eventual call to the raw query method
         args = list()
         kwargs = dict()
 
+        # Copy the incoming set of free-form arguments
+        if rawqueryargs:
+            for arg in rawqueryargs:
+                args.append(arg)
+        if rawquerykwargs:
+            for (k, v) in rawquerykwargs.items():
+                kwargs[k] = v
+
+        # Now consider the canned criteria
         if radius is not None:
             kwargs["radius"] = radius
         if coordinates is not None:
@@ -280,7 +341,7 @@ class ObservationsClass(BaseQuery):
                     raise ValueError("utc_date tuple should have two values")
                 if not isinstance(utc_date[0], date) or not isinstance(utc_date[1], date):
                     raise ValueError("utc_date tuple should have date values in it")
-                args.append("%s-%s" % utc_date[0].strftime("YYYYMMdd"), utc_date[1].strftime("YYYYMMdd"))
+                args.append("{:%Y%m%d}-{:%Y%m%d}".format(*utc_date))
         if instrument is not None:
             if instrument.upper() not in __valid_instruments__:
                 raise ValueError("Unrecognized instrument: %s" % instrument)
@@ -309,6 +370,8 @@ class ObservationsClass(BaseQuery):
             if raw_reduced not in __valid_raw_reduced__:
                 raise ValueError("Unrecognized raw/reduced setting: %s" % raw_reduced)
             args.append(raw_reduced)
+        if orderby is not None:
+            kwargs["orderby"] = orderby
 
         return self.query_raw(*args, **kwargs)
 
@@ -343,7 +406,9 @@ class ObservationsClass(BaseQuery):
             The list of parameters to be passed via the query path to the webserver
         kwargs :
             The dictionary of parameters to be passed by name=value within the query
-            path to the webserver
+            path to the webserver.  The ``orderby`` key value pair has a special
+            intepretation and is appended as a query parameter like the one used
+            in the archive website for sorting results.
 
         Returns
         -------
@@ -355,6 +420,21 @@ class ObservationsClass(BaseQuery):
 
         js = response.json()
         return _gemini_json_to_table(js)
+
+    def get_file(self, filename, *, download_dir='.', timeout=None):
+        """
+        Download the requested file to the current directory
+
+        filename : str
+            Name of the file to download
+        download_dir : str, optional
+            Name of the directory to download to
+        timeout : int, optional
+            Timeout of the request in milliseconds
+        """
+        url = "https://archive.gemini.edu/file/%s" % filename
+        local_filepath = os.path.join(download_dir, filename)
+        self._download_file(url=url, local_filepath=local_filepath, timeout=timeout)
 
 
 def _gemini_json_to_table(json):

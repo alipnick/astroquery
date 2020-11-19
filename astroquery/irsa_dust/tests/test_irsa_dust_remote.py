@@ -3,11 +3,10 @@ import os
 import pytest
 import requests
 
-from astropy.tests.helper import remote_data
 from astropy.table import Table
 import astropy.units as u
-from ... import irsa_dust
 
+from ... import irsa_dust
 
 M31_XML = "dustm31.xml"
 M81_XML = "dustm81.xml"
@@ -34,14 +33,14 @@ M31_URL_T = [
 ]
 
 
-class DustTestCase(object):
+class DustTestCase:
 
     def data(self, filename):
         data_dir = os.path.join(os.path.dirname(__file__), 'data')
         return os.path.join(data_dir, filename)
 
 
-@remote_data
+@pytest.mark.remote_data
 class TestDust(DustTestCase):
 
     def test_xml_ok(self):

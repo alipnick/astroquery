@@ -14,7 +14,6 @@ from astropy import units as u
 from astropy.coordinates import ICRS, SkyCoord
 from astropy.io.votable.tree import Table as VOTable
 from astropy.table import Table
-from astropy.tests.helper import remote_data
 from astropy.utils.data import get_pkg_data_filename
 from astropy.utils import data
 
@@ -35,8 +34,8 @@ SCS_CENTER = ICRS(SCS_RA * u.degree, SCS_DEC * u.degree)
 SCS_RADIUS = SCS_SR * u.degree
 
 
-@remote_data
-class TestConeSearch(object):
+@pytest.mark.remote_data
+class TestConeSearch:
     """
     Test Cone Search on a pre-defined access URL.
 
@@ -219,7 +218,7 @@ class TestConeSearch(object):
         data.conf.reset('remote_timeout')
 
 
-class TestErrorResponse(object):
+class TestErrorResponse:
     """
     Test Cone Search error response handling.
 
